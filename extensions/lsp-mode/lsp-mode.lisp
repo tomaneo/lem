@@ -245,6 +245,10 @@
         (lem/completion-mode:make-completion-spec 'text-document/completion :async t))
   (setf (variable-value 'language-mode:find-definitions-function)
         #'lsp-find-definitions)
+  (setf (variable-value 'language-mode:find-declarations-function)
+        #'lsp-find-declarations)
+  (setf (variable-value 'language-mode:find-implementations-function)
+        #'lsp-find-implementations)
   (setf (variable-value 'language-mode:find-references-function)
         #'lsp-find-references)
   (setf (buffer-value (current-buffer) 'revert-buffer-function)
@@ -1067,26 +1071,9 @@
                                                :trigger-kind lsp:signature-help-trigger-kind-invoked
                                                :is-retrigger +false+)))
 
-;;; declaration
+;;; Common functions for requests which return locations
 
-(defun provide-declaration-p (workspace)
-  (handler-case (lsp:server-capabilities-declaration-provider
-                 (workspace-server-capabilities workspace))
-    (unbound-slot () nil)))
-
-(defun text-document/declaration (point)
-  (declare (ignore point))
-  ;; TODO: goplsが対応していなかったので後回し
-  nil)
-
-;;; definition
-
-(defun provide-definition-p (workspace)
-  (handler-case (lsp:server-capabilities-definition-provider
-                 (workspace-server-capabilities workspace))
-    (unbound-slot () nil)))
-
-(defun definition-location-to-content (file location)
+(defun location-to-content (file location)
   (when-let* ((buffer (find-file-buffer file))
               (point (buffer-point buffer))
               (range (lsp:location-range location)))
@@ -1112,11 +1099,11 @@
          :position (language-mode::make-position
                     (1+ (lsp:position-line start-position))
                     (lsp:position-character start-position))
-         :content (definition-location-to-content file location)))))
+         :content (location-to-content file location)))))
   (:method ((location lsp:location-link))
     (error "locationLink is unsupported")))
 
-(defun convert-definition-response (value)
+(defun convert-location-response (value)
   (remove nil
           (cond ((typep value 'lsp:location)
                  (list (convert-location value)))
@@ -1125,6 +1112,38 @@
                  (map 'list #'convert-location value))
                 (t
                  nil))))
+
+;;; declaration
+
+(defun provide-declaration-p (workspace)
+  (handler-case (lsp:server-capabilities-declaration-provider
+                 (workspace-server-capabilities workspace))
+    (unbound-slot () nil)))
+
+(defun text-document/declaration (point then)
+  (when-let ((workspace (get-workspace-from-point point)))
+    (when (provide-declaration-p workspace)
+      (async-request
+       (workspace-client workspace)
+       (make-instance 'lsp:text-document/declaration)
+       (apply #'make-instance
+              'lsp:declaration-params
+              (make-text-document-position-arguments point))
+       :then (lambda (response)
+               (funcall then (convert-location-response response))
+               (redraw-display))))))
+
+(defun lsp-find-declarations (point)
+  (check-connection)
+  (text-document/definition point #'language-mode:display-xref-locations))
+
+;;; definition
+
+(defun provide-definition-p (workspace)
+  (handler-case (lsp:server-capabilities-definition-provider
+                 (workspace-server-capabilities workspace))
+    (unbound-slot () nil)))
+
 
 (defun text-document/definition (point then)
   (when-let ((workspace (get-workspace-from-point point)))
@@ -1136,7 +1155,7 @@
               'lsp:definition-params
               (make-text-document-position-arguments point))
        :then (lambda (response)
-               (funcall then (convert-definition-response response))
+               (funcall then (convert-location-response response))
                (redraw-display))))))
 
 (defun lsp-find-definitions (point)
@@ -1150,9 +1169,6 @@
                  (workspace-server-capabilities workspace))
     (unbound-slot () nil)))
 
-(defun convert-type-definition-response (value)
-  (convert-definition-response value))
-
 (defun text-document/type-definition (point then)
   (when-let ((workspace (get-workspace-from-point point)))
     (when (provide-type-definition-p workspace)
@@ -1162,7 +1178,7 @@
                             'lsp:type-definition-params
                             (make-text-document-position-arguments point))
                      :then (lambda (response)
-                             (funcall then (convert-type-definition-response response)))))))
+                             (funcall then (convert-location-response response)))))))
 
 (define-command lsp-type-definition () ()
   (check-connection)
@@ -1175,9 +1191,6 @@
                  (workspace-server-capabilities workspace))
     (unbound-slot () nil)))
 
-(defun convert-implementation-response (value)
-  (convert-definition-response value))
-
 (defun text-document/implementation (point then)
   (when-let ((workspace (get-workspace-from-point point)))
     (when (provide-implementation-p workspace)
@@ -1187,12 +1200,14 @@
                             'lsp:type-definition-params
                             (make-text-document-position-arguments point))
                      :then (lambda (response)
-                             (funcall then (convert-implementation-response response)))))))
+                             (funcall then (convert-location-response response)))))))
+
+(defun lsp-find-implementations (point)
+  (check-connection)
+  (text-document/implementation point #'language-mode:display-xref-locations))
 
 (define-command lsp-implementation () ()
-  (check-connection)
-  (text-document/implementation (current-point)
-                                #'language-mode:display-xref-locations))
+  (lsp-find-implementations (current-point)))
 
 ;;; references
 
@@ -1218,7 +1233,7 @@
                          :filespec (language-mode:xref-location-filespec location)
                          :position (language-mode:xref-location-position location)
                          :content (xref-location-to-content location)))
-                      (convert-definition-response value))))
+                      (convert-location-response value))))
 
 (defun text-document/references (point then &optional include-declaration)
   (when-let ((workspace (get-workspace-from-point point)))
