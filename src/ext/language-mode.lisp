@@ -13,6 +13,10 @@
    :insertion-line-comment
    :find-definitions-function
    :find-definitions
+   :find-declarations-function
+   :find-declarations
+   :find-implementations-function
+   :find-implementations
    :find-references-function
    :find-references
    :language-mode-tag
@@ -54,6 +58,8 @@
 (define-editor-variable line-comment nil)
 (define-editor-variable insertion-line-comment nil)
 (define-editor-variable find-definitions-function nil)
+(define-editor-variable find-declarations-function nil)
+(define-editor-variable find-implementations-function nil)
 (define-editor-variable find-references-function nil)
 (define-editor-variable language-mode-tag nil)
 (define-editor-variable completion-spec nil)
@@ -387,6 +393,14 @@
 
 (define-command find-definitions (&optional (point (current-point))) ()
   (alexandria:when-let (fn (variable-value 'find-definitions-function :buffer point))
+    (funcall fn point)))
+
+(define-command find-declarations (&optional (point (current-point))) ()
+  (alexandria:when-let (fn (variable-value 'find-declarations-function :buffer point))
+    (funcall fn point)))
+
+(define-command find-implementations (&optional (point (current-point))) ()
+  (alexandria:when-let (fn (variable-value 'find-implementations-function :buffer point))
     (funcall fn point)))
 
 (defun xref-references-length=1 (xref-references-list)
