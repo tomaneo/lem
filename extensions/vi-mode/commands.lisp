@@ -306,20 +306,20 @@
              (eql (character-at (current-point)) #\Space))
     (vi-backward-char)))
 
-(define-motion vi-move-to-window-top () ()
+(define-motion vi-move-to-window-top (&optional n) (:universal-nil)
     (:type :line
      :jump t)
-  (move-to-window-top))
+  (move-to-window-top n))
 
 (define-motion vi-move-to-window-middle () ()
     (:type :line
      :jump t)
   (move-to-window-middle))
 
-(define-motion vi-move-to-window-bottom () ()
+(define-motion vi-move-to-window-bottom (&optional n) (:universal-nil)
     (:type :line
      :jump t)
-  (move-to-window-bottom))
+  (move-to-window-bottom n))
 
 (define-command vi-scroll-line-to-center (&optional n) (:universal-nil)
   "Scroll line number N (or the current line) to the center of the screen."

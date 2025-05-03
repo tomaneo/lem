@@ -43,22 +43,26 @@
     (or (< 1 (line-number-at-point start-point))
         (/= 0 (point-charpos start-point)))))
 
-(defun move-to-window-top ()
+(defun move-to-window-top (&optional offset)
   (let ((window (current-window)))
     (move-point (current-point) (window-start-point window))
-    (when (window-has-leading-lines-p window)
-      (next-line (scroll-offset)))))
+    (if offset
+        (next-line (1- offset))
+        (when (window-has-leading-lines-p window)
+          (next-line (scroll-offset))))))
 
 (defun move-to-window-middle ()
   (let ((window (current-window)))
     (move-point (current-point) (window-start-point window))
     (next-line (floor (/ (- (window-height* window) 2) 2)))))
 
-(defun move-to-window-bottom ()
+(defun move-to-window-bottom (&optional offset)
   (let ((window (current-window)))
     (move-point (current-point) (window-end-point window))
-    (when (window-has-following-lines-p window)
-      (previous-line (scroll-offset)))))
+    (if offset
+        (previous-line (1- offset))
+        (when (window-has-following-lines-p window)
+          (previous-line (scroll-offset))))))
 
 (defun move-to-window-bottom-below ()
   (let ((window (current-window)))
