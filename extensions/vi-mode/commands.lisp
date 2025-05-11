@@ -622,10 +622,11 @@ Move the cursor to the first non-blank character of the line."
                                       "~v@{~C~:*~}~*~@[~%~]"
                                       (length string)
                                       char
-                                      (not lastp)))))))
+                                      (not lastp))))))
+            (to-start (visual-p)))
         (delete-between-points start end)
         (insert-string start string-to-replace)
-        (if (visual-p)
+        (if to-start
             (move-point (current-point) start)
             (character-offset (current-point) *cursor-offset*)))))
 

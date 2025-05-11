@@ -32,10 +32,11 @@
            :vi-visual-opposite-side))
 (in-package :lem-vi-mode/visual)
 
-(defvar *start-point* nil)
 (defvar *visual-overlays* '())
-
 (defvar *visual-keymap* (make-keymap :name '*visual-keymap*))
+
+(defmethod make-region-overlays-using-global-mode ((global-mode vi-mode) cursor)
+  *visual-overlays*)
 
 (define-state visual (vi-state) ()
   (:default-initargs
@@ -54,46 +55,48 @@
   (:default-initargs
    :name "V-BLOCK"))
 
+;; A couple of convenience functions
+(defun current-mark ()
+  (buffer-mark (current-buffer)))
+(defun current-mark-set (mark)
+  (buffer-mark-set (current-buffer) mark))
+
 (defmethod state-enabled-hook :after ((state visual))
-  (setf *start-point* (copy-point (current-point))))
+  (unless (buffer-mark-p (current-buffer))
+    (current-mark-set (current-point))))
 
 (defmethod state-disabled-hook ((state visual))
-  (delete-point *start-point*)
-  (setf *start-point* nil)
   (clear-visual-overlays))
 
 (defun disable ()
   (clear-visual-overlays))
 
 (defun clear-visual-overlays ()
-  (mapc 'delete-overlay *visual-overlays*)
   (setf *visual-overlays* '()))
 
 (defmethod post-command-hook ((state visual))
   (clear-visual-overlays)
-  (if (not (eq (current-buffer) (point-buffer *start-point*))) 
-      (vi-visual-end)
-      (state-setup state)))
+  (state-setup state))
 
 (defgeneric state-setup (visual-state))
 
 (defmethod state-setup ((state visual-char))
-  (with-point ((start *start-point*)
+  (with-point ((start (current-mark))
                (end (current-point)))
     (when (point< end start)
       (rotatef start end))
     (character-offset end 1)
-    (push (make-overlay start end 'region)
+    (push (make-overlay start end 'region :temporary t)
           *visual-overlays*)))
 
 (defmethod state-setup ((state visual-line))
-  (apply-region-lines *start-point* (current-point)
+  (apply-region-lines (current-mark) (current-point)
                       (lambda (p)
-                        (push (make-line-overlay p 'region)
+                        (push (make-line-overlay p 'region :temporary t)
                               *visual-overlays*))))
 
 (defmethod state-setup ((state visual-block))
-  (with-point ((start *start-point*)
+  (with-point ((start (current-mark))
                (end (current-point)))
     (let ((start-column (point-column start))
           (end-column (point-column end)))
@@ -112,10 +115,11 @@
                             (with-point ((s p) (e p))
                               (move-to-column s start-column)
                               (move-to-column e end-column)
-                              (push (make-overlay s e 'region) *visual-overlays*)))))))
+                              (push (make-overlay s e 'region :temporary t) *visual-overlays*)))))))
 
 (define-command vi-visual-end () ()
   (clear-visual-overlays)
+  (buffer-mark-cancel (current-buffer))
   (change-state 'normal))
 
 (defun enable-visual (new-state)
@@ -125,11 +129,9 @@
       ((typep current-state (class-name (class-of new-state)))
        (vi-visual-end))
       ((typep current-state 'visual)
-       (check-type *start-point* point)
-       (assert (alive-point-p *start-point*))
-       (let ((start (copy-point *start-point*)))
+       (with-point ((mark (current-mark)))
          (prog1 (change-state new-state)
-           (setf *start-point* start))))
+           (current-mark-set mark))))
       (t
        (change-state new-state)))))
 
@@ -155,7 +157,7 @@
   (typep (current-main-state) 'visual-block))
 
 (defun visual-range ()
-  (with-point ((start *start-point*)
+  (with-point ((start (current-mark))
                (end (current-point)))
     (cond
       ((visual-char-p)
@@ -185,11 +187,11 @@
     (cond
       ((or (visual-char-p)
            (visual-block-p))
-       (setf *start-point* start)
+       (current-mark-set start)
        (move-point (current-point) end))
       ((visual-line-p)
-       (unless (same-line-p *start-point* start)
-         (setf *start-point* start))
+       (unless (same-line-p (current-mark) start)
+         (current-mark-set start))
        (unless (same-line-p end (current-point))
          (move-point (current-point) end))))))
 
@@ -234,20 +236,21 @@
     (vi-visual-end)))
 
 (define-command vi-visual-swap-points () ()
-  (with-point ((start *start-point*))
-    (move-point *start-point* (current-point))
+  (with-point ((start (current-mark)))
+    (current-mark-set (current-point))
     (move-point (current-point) start)))
 
 (define-command vi-visual-opposite-side () ()
   (if (visual-block-p)
-      (let ((start-col (point-charpos *start-point*))
+      (let ((start-col (point-charpos (current-mark)))
             (end-col (point-charpos (current-point))))
-        (move-to-column *start-point* end-col)
+        (move-to-column (current-mark) end-col)
         (move-to-column (current-point) start-col))
       (vi-visual-swap-points)))
 
 (defmethod check-marked-using-global-mode ((global-mode vi-mode) buffer)
-  nil)
+  (unless (buffer-mark buffer)
+    (editor-error "Not mark in this buffer")))
 
 (defmethod set-region-point-using-global-mode ((global-mode vi-mode) (start point) (end point))
   (declare (ignore global-mode))
@@ -257,15 +260,30 @@
       (move-point end (cadr v-range)))))
 
 (defmethod region-beginning-using-global-mode ((global-mode vi-mode)
-                                         &optional (buffer (current-buffer)))
+                                               &optional (buffer (current-buffer)))
   (declare (ignore buffer))
   (if (visual-p)
       (car (visual-range))
       (editor-error "Not in visual mode")))
 
 (defmethod region-end-using-global-mode ((global-mode vi-mode)
-                                   &optional (buffer (current-buffer)))
+                                         &optional (buffer (current-buffer)))
   (declare (ignore buffer))
   (if (visual-p)
       (cadr (visual-range))
       (editor-error "Not in visual mode")))
+
+(defun enable-visual-from-hook()
+  (unless (visual-p)
+    (vi-visual-char)))
+
+(defun visual-enable-hook ()
+  (add-hook *buffer-mark-activate-hook* 'enable-visual-from-hook)
+  (add-hook *buffer-mark-deactivate-hook* 'vi-visual-end))
+
+(defun visual-disable-hook ()
+  (remove-hook *buffer-mark-activate-hook* 'enable-visual-from-hook)
+  (remove-hook *buffer-mark-deactivate-hook* 'vi-visual-end))
+
+(add-hook *enable-hook* 'visual-enable-hook)
+(add-hook *disable-hook* 'visual-disable-hook)
