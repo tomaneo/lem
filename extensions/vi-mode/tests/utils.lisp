@@ -209,14 +209,15 @@
                                   (if (= position top-left-pos)
                                       (1- bot-right-pos)
                                       top-left-pos))
-                (setf lem-vi-mode/visual::*start-point* p))))
+                (lem::buffer-mark-set buffer p)
+                (lem-vi-mode/commands::vi-visual-char))))
           (dolist (region visual-regions)
             (destructuring-bind (from . to) region
               (with-point ((start point)
                            (end point))
                 (move-to-position start from)
                 (move-to-position end to)
-                (push (lem:make-overlay start end 'lem:region)
+                (push (lem:make-overlay start end 'lem:region :temporary t)
                       lem-vi-mode/visual::*visual-overlays*)))))))
     buffer))
 
@@ -263,12 +264,14 @@
                          'visual-char
                          (current-state))))
           (voverlay lem-vi-mode/visual::*visual-overlays*)
-          (start (and lem-vi-mode/visual::*start-point*
-                      (copy-point lem-vi-mode/visual::*start-point*))))
+          (start (and (lem-vi-mode/visual::visual-p)
+                      (lem-vi-mode/visual::current-mark))))
       (lem-core:change-buffer-mode buffer 'vi-mode)
       (with-vi-state (state)
-        (setf lem-vi-mode/visual::*visual-overlays* voverlay
-              lem-vi-mode/visual::*start-point* start)
+        (setf lem-vi-mode/visual::*visual-overlays* voverlay)
+        (when start
+          (lem::buffer-mark-set buffer start)
+          (lem-vi-mode/commands::vi-visual-char))
         (testing (format nil "[buf] \"~A\""
                          (text-backslashed
                           (make-buffer-string (current-buffer))))
