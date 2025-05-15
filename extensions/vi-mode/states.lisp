@@ -108,11 +108,13 @@
   (change-state 'vi-modeline))
 
 (defun vi-enable-hook ()
+  (setf *region-end-offset* -1)
   (change-state 'normal)
   (add-hook *prompt-activate-hook* 'enable-vi-modeline-state)
   (add-hook *prompt-deactivate-hook* 'enable-normal-state))
 
 (defun vi-disable-hook ()
+  (setf *region-end-offset* 0)
   (remove-hook *prompt-activate-hook* 'enable-vi-modeline-state)
   (remove-hook *prompt-deactivate-hook* 'enable-normal-state))
 
