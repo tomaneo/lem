@@ -209,7 +209,7 @@
                                   (if (= position top-left-pos)
                                       (1- bot-right-pos)
                                       top-left-pos))
-                (lem::buffer-mark-set buffer p)
+                (lem:buffer-mark-set buffer p)
                 (lem-vi-mode/commands::vi-visual-char))))
           (dolist (region visual-regions)
             (destructuring-bind (from . to) region
@@ -270,7 +270,7 @@
       (with-vi-state (state)
         (setf lem-vi-mode/visual::*visual-overlays* voverlay)
         (when start
-          (lem::buffer-mark-set buffer start)
+          (lem:buffer-mark-set buffer start)
           (lem-vi-mode/commands::vi-visual-char))
         (testing (format nil "[buf] \"~A\""
                          (text-backslashed
