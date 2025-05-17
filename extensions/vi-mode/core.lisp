@@ -14,6 +14,7 @@
            :vi-state
            :vi-mode
            :define-state
+           :ensure-state
            :current-state
            :current-main-state
            :state=
