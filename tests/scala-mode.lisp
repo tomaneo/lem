@@ -8,6 +8,7 @@
   (skip "Skipped temporarily... FIXME assertion failure")
   #+(or)
   (with-testing-buffer (buffer (lem:find-file-buffer (sample-file "LemScalaIndent.scala")))
+    (lem-scala-mode:scala-mode)
     (testing "Test indent region"
       (let ((before (lem:buffer-text buffer))
             (after)
